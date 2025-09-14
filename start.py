@@ -1,14 +1,16 @@
+from __future__ import annotations
+
+import argparse
 import asyncio
 import logging
 import os
 
-from SieportalGetTreeApi import SieportalTreeAPI
-from SieportalPagination import Pagination
-
 import aiocsv
 import aiofiles
 import aiohttp
-import argparse
+
+from SieportalGetTreeApi import SieportalTreeAPI
+from SieportalPagination import Pagination
 
 
 def parse_args():
@@ -16,15 +18,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Sieportal data extraction tool")
 
     parser.add_argument(
-        "--input", "-i", default="files/key.csv", help="Input CSV file with node IDs"
+        "--input", "-i", default="files/key.csv", help="Input CSV file with node IDs",
     )
 
     parser.add_argument(
-        "--language", "-l", default="en", help="Language code (e.g., en, de, fr)"
+        "--language", "-l", default="en", help="Language code (e.g., en, de, fr)",
     )
 
     parser.add_argument(
-        "--region", "-r", default="kr", help="Region code (e.g., kr, us, de)"
+        "--region", "-r", default="kr", help="Region code (e.g., kr, us, de)",
     )
 
     parser.add_argument(
@@ -46,7 +48,7 @@ def parse_args():
 
 
 async def read(fp: str):
-    async with aiofiles.open(fp, "r", newline="") as file:
+    async with aiofiles.open(fp, newline="") as file:
         reader = aiocsv.AsyncReader(file)
 
         async for line in reader:
@@ -66,7 +68,7 @@ async def main():
         os.makedirs(output_dir, exist_ok=True)
 
     async with aiofiles.open(
-        f"files\\{args.language}-{args.region}.csv", "a", newline=""
+        f"files\\{args.language}-{args.region}.csv", "a", newline="",
     ) as file:
         writer = aiocsv.AsyncWriter(file)
         async with aiohttp.ClientSession() as session:
@@ -79,32 +81,32 @@ async def main():
                     continue
 
                 logging.info(
-                    f"Найдены продукты: {data['variants']}, аксесуары {data['product']} - [{node_id}]"
+                    f"Найдены продукты: {data['variants']}, аксесуары {data['product']} - [{node_id}]",
                 )
                 if data["variants"]:
-                    page = await Pagination.create(
-                        node_id, sie, SieportalTreeAPI.get_products
+                    pagination = await Pagination.create(
+                        node_id, sie, SieportalTreeAPI.get_products,
                     )
-                    if page is None:
+                    if pagination is None:
                         continue
-                    async for page in page.fetch_all():
+                    async for page in pagination.fetch_all():
                         if page is None:
                             continue
                         await writer.writerows(
-                            list(map(lambda x: [x.article, x.url], page.items))
+                            [[x.article, x.url] for x in page.items],
                         )
 
                 if data["product"]:
-                    page = await Pagination.create(
-                        node_id, sie, SieportalTreeAPI.get_accesories
+                    pagination = await Pagination.create(
+                        node_id, sie, SieportalTreeAPI.get_accesories,
                     )
-                    if page is None:
+                    if pagination is None:
                         continue
-                    async for page in page.fetch_all():
+                    async for page in pagination.fetch_all():
                         if page is None:
                             continue
                         await writer.writerows(
-                            list(map(lambda x: [x.article, x.url], page.items))
+                            [[x.article, x.url] for x in page.items],
                         )
 
 

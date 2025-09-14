@@ -1,13 +1,14 @@
-import logging
-import asyncio
-import random
+from __future__ import annotations
 
-from typing import List, Dict, Optional
+import asyncio
+import logging
+import random
 from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 import aiohttp
 
-from SieportalTyping import PageResult, Product, Child
+from SieportalTyping import Child, PageResult, Product
 
 
 @dataclass
@@ -55,7 +56,7 @@ class SieportalAPI:
 
             try:
                 async with self._session.request(
-                    method, url, *args, **kwargs
+                    method, url, *args, **kwargs,
                 ) as response:
                     response.raise_for_status()
                     logging.debug(f"Status 200 для - {url}")
@@ -64,40 +65,39 @@ class SieportalAPI:
                 if error.status == 401:
                     logging.info("Устаревший/Нерабочий токен обновляем...")
                     async with self._session.post(
-                        self.TOKEN_URL, data=self.config.client_data
+                        self.TOKEN_URL, data=self.config.client_data,
                     ) as response:
                         response.raise_for_status()
                         self._token = await self._get_token()
                     await asyncio.sleep(self.config.sleep_time * try_num)
                     continue
 
-                elif error.status == 403:
+                if error.status == 403:
                     kwargs["proxy"] = random.choice(self.config.proxy_list)
                     logging.warning(
-                        f"Недоступный сид! Использую прокси - {kwargs['proxy']}"
+                        f"Недоступный сид! Использую прокси - {kwargs['proxy']}",
                     )
                     await asyncio.sleep(self.config.sleep_time * try_num)
 
                     continue
 
-                elif 500 < error.status < 600:
+                if 500 < error.status < 600:
                     logging.info(
-                        f"Проблема сервера ждём... - попытка {try_num} - {error.status}"
+                        f"Проблема сервера ждём... - попытка {try_num} - {error.status}",
                     )
                     await asyncio.sleep(self.config.sleep_time)
                     continue
 
-                elif error.status == 400:
+                if error.status == 400:
                     logging.info("Неизвестный тип данных для ")
                     return None
 
-                elif error.status == 500:
+                if error.status == 500:
                     logging.info("Нету данных...")
                     return None
 
-                else:
-                    logging.error(f"Неиожиданный статус: {error.status}")
-                    return None
+                logging.exception(f"Неиожиданный статус: {error.status}")
+                return None
             except Exception as error:
                 logging.exception(f"НЕИЗВЕСТНАЯ ОШИБКА: {error}")
 
@@ -109,13 +109,13 @@ class SieportalAPI:
         while True:
             try:
                 async with self._session.post(
-                    self.TOKEN_URL, data=self.config.client_data
+                    self.TOKEN_URL, data=self.config.client_data,
                 ) as response:
                     response.raise_for_status()
                     token_data = await response.json()
                     return f"Bearer {token_data['access_token']}"
             except Exception as e:
-                logging.error(f"Ошибка получения токена: {e}")
+                logging.exception(f"Ошибка получения токена: {e}")
 
 
 class SieportalTreeAPI(SieportalAPI):
@@ -162,7 +162,7 @@ class SieportalTreeAPI(SieportalAPI):
         }
         response = await self.fetch("GET", self.GET_INFORMATION, params=params)
         if response is None:
-            return
+            return None
 
         return {
             "info": response.get("containsProductInformation", False),
@@ -186,7 +186,7 @@ class SieportalTreeAPI(SieportalAPI):
 
         response = await self.fetch("POST", self.GET_PRODUCTS, json=json_data)
         if response is None:
-            return
+            return None
         product_count = response["productCount"]
 
         return PageResult(
@@ -210,7 +210,7 @@ class SieportalTreeAPI(SieportalAPI):
 
         response = await self.fetch("POST", self.GET_ACCESORIES, json=json_data)
         if response is None:
-            return
+            return None
         product_count = response["productCount"]
         result = PageResult(
             [

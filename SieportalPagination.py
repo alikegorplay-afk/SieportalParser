@@ -1,7 +1,10 @@
-from math import ceil
-from typing import Callable, Any, Optional, AsyncGenerator
+from __future__ import annotations
 
-from SieportalGetTreeApi import SieportalTreeAPI, PageResult
+from collections.abc import AsyncGenerator
+from math import ceil
+from typing import Any, Callable, Optional
+
+from SieportalGetTreeApi import PageResult, SieportalTreeAPI
 
 
 class Pagination:
@@ -36,7 +39,7 @@ class Pagination:
         id: str | int,
         API: SieportalTreeAPI,
         func: Callable = SieportalTreeAPI.get_products,
-    ) -> Optional["Pagination"]:
+    ) -> Optional[Pagination]:
         result = await func(API, id)
         if result is None:
             return None
@@ -56,7 +59,7 @@ class Pagination:
     async def select_page(self, page_num: int) -> Any:
         if not (1 <= page_num <= self.max_page):
             raise ValueError(
-                f"Страница {page_num} не существует. Доступные страницы: от 1 до {self.max_page}"
+                f"Страница {page_num} не существует. Доступные страницы: от 1 до {self.max_page}",
             )
 
         # Если страница уже в кэше, возвращаем её
