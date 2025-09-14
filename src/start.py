@@ -93,12 +93,16 @@ async def parsing() -> None: # noqa: C901
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    output_dir = Path(f"files\\{args.language}-{args.region}.csv")
+    output_dir = Path(f"files")
     if output_dir and not output_dir.exists():
-        Path(output_dir).mkdir(parents=True)
+        fp = Path(output_dir)
+        fp.mkdir(parents=True)
+        fp = fp / f"{args.language}-{args.region}.csv"
+    else:
+        fp = output_dir / f"{args.language}-{args.region}.csv"
 
     async with aiofiles.open(
-        f"files\\{args.language}-{args.region}.csv", "a", newline="",
+        fp, "a", newline="",
     ) as file:
         writer = aiocsv.AsyncWriter(file)
         async with aiohttp.ClientSession() as session:
@@ -111,7 +115,7 @@ async def parsing() -> None: # noqa: C901
                     continue
 
                 logger.info(
-                    "Found products: %, accessories % - [ %]",
+                    "Found products: %s, accessories %s - [%s]",
                     data["variants"],
                     data["product"],
                     node_id,
@@ -120,14 +124,13 @@ async def parsing() -> None: # noqa: C901
                     pagination = await Pagination.create(
                         node_id, sie, SieportalTreeAPI.get_products,
                     )
-                    if pagination is None:
-                        continue
-                    async for page in pagination.fetch_all():
-                        if page is None:
-                            continue
-                        await writer.writerows(
-                            [[x.article, x.url] for x in page.items],
-                        )
+                    if pagination is not None:
+                        async for page in pagination.fetch_all():
+                            if page is None:
+                                continue
+                            await writer.writerows(
+                                [[x.article, x.url] for x in page.items],
+                            )
 
                 if data["product"]:
                     pagination = await Pagination.create(
@@ -136,11 +139,10 @@ async def parsing() -> None: # noqa: C901
                     if pagination is None:
                         continue
                     async for page in pagination.fetch_all():
-                        if page is None:
-                            continue
-                        await writer.writerows(
-                            [[x.article, x.url] for x in page.items],
-                        )
+                        if page is not None:
+                            await writer.writerows(
+                                [[x.article, x.url] for x in page.items],
+                            )
 
 
 if __name__ == "__main__":

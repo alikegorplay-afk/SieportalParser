@@ -59,7 +59,9 @@ class SieportalAPI:
     ) -> None:
         self.max_try = max_try
         if config is None:
-            config = Config()
+            self.config = Config()
+        else:
+            self.config = config
         self._session = session
         self.language = language
         self.region = region_id
@@ -168,6 +170,7 @@ class SieportalTreeAPI(SieportalAPI):
         region_id: str,
         *,
         max_try: int = 3,
+        config: Config | None = None
         ) -> None:
         """Initialize Sieportal API client.
 
@@ -179,7 +182,7 @@ class SieportalTreeAPI(SieportalAPI):
             config: Configuration object
 
         """
-        super().__init__(session, language, region_id, max_try=max_try)
+        super().__init__(session, language, region_id, max_try=max_try, config=config)
 
     async def get_tree_children(self, node_id: int | str) -> PageResult[Child] | None:
         """He takes out from the branch of children."""
