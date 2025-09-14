@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from typing import List, Optional, Generic, TypeVar, Iterator
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 @dataclass
 class Product:
     article: str
     price: Optional[str] = None
     url: Optional[str] = None
+
 
 @dataclass
 class PageResult(Generic[T]):
@@ -16,9 +18,10 @@ class PageResult(Generic[T]):
 
     def __iter__(self) -> Iterator[T]:
         return iter(self.items)  # Проще и правильнее
-    
+
     def __len__(self) -> int:
         return len(self.items)
+
 
 @dataclass
 class Child:
