@@ -1,9 +1,24 @@
+"""Start parsing function.
+
+Keyword Arguments:
+- R: Region example (en, cn, kz)
+- L: Language Example (en, ru, ch)
+- I: File with ID
+Returns: Return_Description
+
+"""
+
+
 from __future__ import annotations
 
 import argparse
 import asyncio
 import logging
-import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import aiocsv
 import aiofiles
@@ -12,9 +27,11 @@ import aiohttp
 from SieportalGetTreeApi import SieportalTreeAPI
 from SieportalPagination import Pagination
 
+logger = logging.getLogger("MainLogger")
 
-def parse_args():
-    """Парсит аргументы командной строки."""
+
+def parse_args() ->  argparse.Namespace:
+    """Parishes the command line arguments."""
     parser = argparse.ArgumentParser(description="Sieportal data extraction tool")
 
     parser.add_argument(
@@ -47,7 +64,19 @@ def parse_args():
     return parser.parse_args()
 
 
-async def read(fp: str):
+async def read(fp: str) -> AsyncGenerator[str]:
+    """Read - takes to the input the path to the file and simply runs out line.
+
+    Args:
+        fp (str): the path to the file.
+
+    Returns:
+        AsyncGenerator [str]: Return generator with article.
+
+    Yields:
+        Iterator [asyncgenerator [str]]: Return generator with article.
+
+    """
     async with aiofiles.open(fp, newline="") as file:
         reader = aiocsv.AsyncReader(file)
 
@@ -55,7 +84,8 @@ async def read(fp: str):
             yield line[0]
 
 
-async def main():
+async def parsing() -> None: # noqa: C901
+    """Start parsing function."""
     args = parse_args()
     logging.basicConfig(
         filename=f"logs\\log-{args.language}-{args.region}.log",
@@ -63,9 +93,9 @@ async def main():
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    output_dir = os.path.dirname(f"files\\{args.language}-{args.region}.csv")
-    if output_dir and not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+    output_dir = Path(f"files\\{args.language}-{args.region}.csv")
+    if output_dir and not output_dir.exists():
+        Path(output_dir).mkdir(parents=True)
 
     async with aiofiles.open(
         f"files\\{args.language}-{args.region}.csv", "a", newline="",
@@ -80,8 +110,11 @@ async def main():
                 if data is None:
                     continue
 
-                logging.info(
-                    f"Найдены продукты: {data['variants']}, аксесуары {data['product']} - [{node_id}]",
+                logger.info(
+                    "Found products: %, accessories % - [ %]",
+                    data["variants"],
+                    data["product"],
+                    node_id,
                 )
                 if data["variants"]:
                     pagination = await Pagination.create(
@@ -110,4 +143,5 @@ async def main():
                         )
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(parsing())

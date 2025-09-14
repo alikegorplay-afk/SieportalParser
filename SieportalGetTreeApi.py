@@ -1,35 +1,52 @@
+"""Sieportal API client implementation."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
 import aiohttp
+import dotenv
 
 from SieportalTyping import Child, PageResult, Product
 
+# Константы после импортов
+HTTP_401_UNAUTHORIZED = 401
+HTTP_403_FORBIDDEN = 403
+HTTP_400_BAD_REQUEST = 400
+HTTP_500_INTERNAL_ERROR = 500
+HTTP_600_MAX = 600
+
+logger = logging.getLogger(__name__)
+dotenv.load_dotenv()
 
 @dataclass
 class Config:
-    sleep_time: int = 3
-    proxy_list: List[str] = None
-    client_data: Dict[str, str] = None
+    """Complete config for data management."""
 
-    def __post_init__(self):
+    sleep_time: int = 3
+    proxy_list: list[str] = None
+    client_data: dict[str, str] = None
+
+    def __post_init__(self) -> None:
+        """Data validation."""
         if self.proxy_list is None:
-            self.proxy_list = ["http://xnuERA:whBHjy@77.73.133.196:8000"]
+            self.proxy_list = [os.getenv("PROXY")]
         if self.client_data is None:
             self.client_data = {
                 "client_id": "Siemens.SiePortal.UI",
-                "client_secret": "7Ym0djaxvwbktNAnRABzu6ohqsxtIfpJuZwsWBXAydT79cCRvRAMfv1OWfKjdy0B",
+                "client_secret": os.getenv("CLIENT_SECRET"),
                 "grant_type": "client_credentials",
             }
 
 
 class SieportalAPI:
-    TOKEN_URL = "https://auth.sieportal.siemens.com/connect/token"
+    TOKEN_URL = (
+        "https://auth.sieportal.siemens.com/connect/token"
+    )
 
     def __init__(
         self,
@@ -38,17 +55,24 @@ class SieportalAPI:
         region_id: str,
         *,
         max_try: int = 3,
-        config: Config = Config(),
-    ):
+        config: Config | None = None,
+    ) -> None:
         self.max_try = max_try
-        self.config = config
+        if config is None:
+            config = Config()
         self._session = session
         self.language = language
         self.region = region_id
 
         self._token = None
 
-    async def fetch(self, method: str, url: str, *args, **kwargs) -> Dict:
+    async def fetch(
+        self,
+        method: str,
+        url: str,
+        *args: str,
+        **kwargs: dict[str, str | dict[str, str]],
+    ) -> dict:
         for try_num in range(1, self.max_try + 1):
             headers = kwargs.get("headers", {})
             headers["authorization"] = self._token or await self._get_token()
@@ -59,11 +83,11 @@ class SieportalAPI:
                     method, url, *args, **kwargs,
                 ) as response:
                     response.raise_for_status()
-                    logging.debug(f"Status 200 для - {url}")
+                    logger.debug("Status 200 for - %", url)
                     return await response.json()
             except aiohttp.ClientResponseError as error:
-                if error.status == 401:
-                    logging.info("Устаревший/Нерабочий токен обновляем...")
+                if error.status == HTTP_401_UNAUTHORIZED:
+                    logger.info("Outdated/non -working token we update ...")
                     async with self._session.post(
                         self.TOKEN_URL, data=self.config.client_data,
                     ) as response:
@@ -72,40 +96,43 @@ class SieportalAPI:
                     await asyncio.sleep(self.config.sleep_time * try_num)
                     continue
 
-                if error.status == 403:
+                if error.status == HTTP_403_FORBIDDEN:
                     kwargs["proxy"] = random.choice(self.config.proxy_list)
-                    logging.warning(
-                        f"Недоступный сид! Использую прокси - {kwargs['proxy']}",
+                    logger.warning(
+                        "Inaccessible SID!I use proxy - %",
+                        kwargs["proxy"],
                     )
                     await asyncio.sleep(self.config.sleep_time * try_num)
 
                     continue
 
-                if 500 < error.status < 600:
-                    logging.info(
-                        f"Проблема сервера ждём... - попытка {try_num} - {error.status}",
+                if HTTP_500_INTERNAL_ERROR < error.status < HTTP_500_INTERNAL_ERROR + 100:
+                    logger.info(
+                        "The problem of the server is waiting for ... - Trying % - %",
+                        try_num,
+                        error.status,
                     )
                     await asyncio.sleep(self.config.sleep_time)
                     continue
 
-                if error.status == 400:
-                    logging.info("Неизвестный тип данных для ")
+                if error.status == HTTP_400_BAD_REQUEST:
+                    logger.info("Unknown data type")
                     return None
 
-                if error.status == 500:
-                    logging.info("Нету данных...")
+                if error.status == HTTP_500_INTERNAL_ERROR:
+                    logger.info("There is no data ...")
                     return None
 
-                logging.exception(f"Неиожиданный статус: {error.status}")
+                logger.exception("Inexpedient status: %", error.status)
                 return None
             except Exception as error:
-                logging.exception(f"НЕИЗВЕСТНАЯ ОШИБКА: {error}")
+                logger.exception("Unknown error: %", error)
 
-        logging.warning(f"Не смогли достучаться до сервера за {self.max_try} попыток")
+        logger.warning("Could not reach the server for % of attempts", self.max_try)
         return None
 
     async def _get_token(self) -> str:
-        """Получение токена авторизации"""
+        """Obtaining a token of authorization."""
         while True:
             try:
                 async with self._session.post(
@@ -115,10 +142,12 @@ class SieportalAPI:
                     token_data = await response.json()
                     return f"Bearer {token_data['access_token']}"
             except Exception as e:
-                logging.exception(f"Ошибка получения токена: {e}")
+                logger.exception("Token Error: %", e)
 
 
 class SieportalTreeAPI(SieportalAPI):
+    """Main API class for Sieportal connection."""
+
     GET_TREE_CHILDREN = (
         "https://sieportal.siemens.com/api/mall/CatalogTreeApi/GetTreeChildren"
     )
@@ -132,13 +161,31 @@ class SieportalTreeAPI(SieportalAPI):
         "https://sieportal.siemens.com/api/mall/CatalogTreeApi/GetNodeInformation"
     )
 
-    def __init__(self, session, language, region_id, *, max_try=3):
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        language: str,
+        region_id: str,
+        *,
+        max_try: int = 3,
+        ) -> None:
+        """Initialize Sieportal API client.
+
+        Args:
+            session: aiohttp client session
+            language: API language
+            region_id: Region identifier
+            max_try: Maximum retry attempts
+            config: Configuration object
+
+        """
         super().__init__(session, language, region_id, max_try=max_try)
 
-    async def get_tree_children(self, id: int | str) -> Optional[PageResult[Child]]:
+    async def get_tree_children(self, node_id: int | str) -> PageResult[Child] | None:
+        """He takes out from the branch of children."""
         params = {
             "ClassificationScheme": "CatalogTree",
-            "NodeId": id,
+            "NodeId": node_id,
             "IsCatalogPage": "true",
             "RegionId": self.region,
             "CountryCode": self.region,
@@ -153,9 +200,10 @@ class SieportalTreeAPI(SieportalAPI):
         table = [Child(*data.values()) for data in response]
         return PageResult(table, len(table))
 
-    async def get_tree_information(self, id: int | str) -> Optional[Dict[str, bool]]:
+    async def get_tree_information(self, node_id: int | str) -> dict[str, bool] | None:
+        """Take out information about the branch."""
         params = {
-            "NodeId": id,
+            "NodeId": node_id,
             "RegionId": self.region,
             "TreeName": "CatalogTree",
             "Language": self.language,
@@ -170,10 +218,15 @@ class SieportalTreeAPI(SieportalAPI):
             "product": response.get("containsRelatedProducts", False),
         }
 
-    async def get_products(self, id: int | str, page: int = 0):
+    async def get_products(
+        self,
+        node_id: int | str,
+        page: int = 0,
+        ) -> PageResult[Product] | None:
+        """Return the number of products in the indicated investment."""
         json_data = {
             "technicalSelectionFilters": [],
-            "nodeId": id,
+            "nodeId": node_id,
             "treeName": "CatalogTree",
             "pageNumberIndex": page,
             "limit": 50,
@@ -197,11 +250,16 @@ class SieportalTreeAPI(SieportalAPI):
             product_count,
         )
 
-    async def get_accesories(self, id: int, page: int = 0):
+    async def get_accesories(
+        self,
+        node_id: int,
+        page: int = 0,
+        ) -> PageResult[Product] | None:
+        """Return values from add goods."""
         json_data = {
             "regionId": self.region,
             "language": self.language,
-            "nodeId": id,
+            "nodeId": node_id,
             "treeName": "CatalogTree",
             "pageNumberIndex": page,
             "limit": 50,
@@ -212,12 +270,10 @@ class SieportalTreeAPI(SieportalAPI):
         if response is None:
             return None
         product_count = response["productCount"]
-        result = PageResult(
+        return PageResult(
             [
                 Product(article=product["articleNumber"], url=product.get("url"))
                 for product in response.get("products", [])
             ],
             product_count,
         )
-
-        return result
